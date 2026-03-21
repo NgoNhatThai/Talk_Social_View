@@ -99,6 +99,10 @@ const getRoomName = (room: any) => {
   return `Chat ${room._id.substring(0, 5)}`;
 };
 
+const getOtherUserId = (room: any) => {
+  return room.participantIds?.find((id: string) => id !== authStore.user?._id) || '';
+};
+
 const sortedMessages = computed(() => {
   return [...chatStore.messages].sort((a, b) => 
     new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
@@ -147,6 +151,10 @@ const pendingRequests = computed(() =>
               <span class="room-name">{{ getRoomName(room) }}</span>
               <span class="last-message">Click to view messages...</span>
             </div>
+            
+            <router-link :to="`/profile/${getOtherUserId(room)}`" class="profile-link-small" @click.stop>
+              👤
+            </router-link>
           </div>
           <div v-if="chatStore.rooms.length === 0" class="empty-state">
             No chats yet. Add a friend to start!
@@ -225,10 +233,10 @@ const pendingRequests = computed(() =>
         <div v-if="searchResult" class="search-result">
           <div class="user-card">
             <div class="avatar-circle large">{{ searchResult.username.charAt(0) }}</div>
-            <div class="user-info">
+            <router-link :to="`/profile/${searchResult._id}`" class="user-info">
               <strong>{{ searchResult.username }}</strong>
               <span>{{ searchResult.phoneNumber }}</span>
-            </div>
+            </router-link>
             <button class="btn btn-primary" @click="handleSendRequest">Add</button>
           </div>
         </div>
@@ -362,7 +370,23 @@ const pendingRequests = computed(() =>
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  max-width: 170px; /* Reduced to make room for profile-link */
+}
+
+.profile-link-small {
+  margin-left: auto;
+  padding: 0.5rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  text-decoration: none;
+  font-size: 1rem;
+  transition: var(--transition);
+  opacity: 0.5;
+}
+
+.profile-link-small:hover {
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 1;
 }
 
 /* Requests List */

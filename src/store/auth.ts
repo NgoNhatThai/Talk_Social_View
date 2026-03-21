@@ -2,11 +2,20 @@ import { defineStore } from 'pinia';
 import Cookies from 'js-cookie';
 import api from '@/api';
 
+export interface Video {
+  _id: string;
+  title: string;
+  url: string;
+  userId: string;
+  createdAt: string;
+}
+
 export interface User {
   _id: string;
   phoneNumber: string;
   username?: string;
   email?: string;
+  videos?: Video[];
 }
 
 export const useAuthStore = defineStore('auth', {

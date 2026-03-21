@@ -26,7 +26,10 @@ const handleLogout = () => {
         
         <template v-if="authStore.user">
           <div class="user-profile">
-            <span class="username">{{ authStore.user.username }}</span>
+            <router-link to="/profile/me" class="username-link">
+              <span class="avatar-sm">{{ authStore.user.username?.charAt(0) || 'U' }}</span>
+              <span class="username">{{ authStore.user.username }}</span>
+            </router-link>
             <button @click="handleLogout" class="btn btn-ghost btn-xs">Logout</button>
           </div>
         </template>
@@ -110,10 +113,36 @@ nav {
   border: 1px solid var(--border-color);
 }
 
+.username-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+.username-link:hover .username {
+  color: var(--secondary-color);
+}
+
+.avatar-sm {
+  width: 28px;
+  height: 28px;
+  background: var(--accent-gradient);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: white;
+}
+
 .username {
   font-weight: 600;
   font-size: 0.9rem;
-  color: var(--primary-color);
+  color: var(--text-primary);
+  transition: var(--transition);
 }
 
 .backend-link {
