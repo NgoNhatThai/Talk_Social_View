@@ -46,10 +46,10 @@ const handleRegister = async () => {
       password: password.value,
     });
 
-    const { accessToken, user } = loginResponse.data;
+    const { accessToken, refreshToken, user } = loginResponse.data;
     
-    // Save token to cookie (default remember)
-    authStore.setToken(accessToken, true);
+    // Save tokens to cookie (default remember)
+    authStore.setTokens(accessToken, refreshToken, true);
     authStore.setUser(user);
 
     // Redirect to chats

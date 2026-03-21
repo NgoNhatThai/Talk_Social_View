@@ -8,6 +8,8 @@ export interface Message {
   text: string;
   userId: string;
   createdAt: string;
+  replyToId?: string;
+  readBy?: string[];
 }
 
 export interface Room {
@@ -33,6 +35,8 @@ export const useChatStore = defineStore('chat', {
     activeRoomId: null as string | null,
     loading: false,
     searchQuery: '',
+    typingUsers: {} as { [roomId: string]: string[] },
+    replyTo: null as Message | null,
   }),
 
   getters: {
@@ -43,6 +47,7 @@ export const useChatStore = defineStore('chat', {
       );
     },
     activeRoom: (state) => state.rooms.find(r => r._id === state.activeRoomId),
+    currentTypingUsers: (state) => state.activeRoomId ? state.typingUsers[state.activeRoomId] || [] : [],
   },
 
   actions: {
@@ -64,12 +69,32 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
-    async sendMessage(roomId: string, text: string) {
+    async sendMessage(roomId: string, text: string, replyToId?: string) {
       try {
-        await api.post('/messages', { roomId, text });
+        const payload: any = { roomId, text };
+        if (replyToId) payload.replyToId = replyToId;
+        await api.post('/messages', payload);
+        this.replyTo = null; // Clear reply after send
       } catch (err) {
         console.error('Send message error:', err);
       }
+    },
+
+    async markAsRead(messageId: string) {
+      try {
+        await api.patch(`/messages/${messageId}`, { readBy: [] });
+      } catch (err) {
+        console.error('Mark as read error:', err);
+      }
+    },
+
+    sendTyping(roomId: string, isTyping: boolean) {
+      const event = isTyping ? 'typing' : 'stopTyping';
+      socketService.emit(`messages ${event}`, { roomId });
+    },
+
+    setReplyTo(message: Message | null) {
+      this.replyTo = message;
     },
 
     async findUserByPhone(phone: string) {
@@ -92,7 +117,6 @@ export const useChatStore = defineStore('chat', {
     async handleFriendRequest(requestId: string, status: 'accepted' | 'rejected') {
       try {
         await api.patch(`/friend-requests/${requestId}`, { status });
-        // After accepting, we usually wait for 'rooms created' socket event
       } catch (err) {
         console.error('Handle friend request error:', err);
       }
@@ -102,10 +126,29 @@ export const useChatStore = defineStore('chat', {
     addMessage(message: Message) {
       if (this.activeRoomId === message.roomId) {
         this.messages.push(message);
+        // If I'm viewing this room, marks as read automatically
+        this.markAsRead(message._id);
       }
       // Update room's last message
       const room = this.rooms.find(r => r._id === message.roomId);
       if (room) room.lastMessageId = message._id;
+    },
+
+    updateMessage(message: Message) {
+       const idx = this.messages.findIndex(m => m._id === message._id);
+       if (idx !== -1) {
+         this.messages[idx] = message;
+       }
+    },
+
+    handleTyping(data: { roomId: string, userId: string }, isTyping: boolean) {
+      if (!this.typingUsers[data.roomId]) this.typingUsers[data.roomId] = [];
+      const users = this.typingUsers[data.roomId];
+      if (isTyping) {
+        if (!users.includes(data.userId)) users.push(data.userId);
+      } else {
+        this.typingUsers[data.roomId] = users.filter(id => id !== data.userId);
+      }
     },
 
     addRoom(room: Room) {
@@ -126,6 +169,10 @@ export const useChatStore = defineStore('chat', {
     setupSocket() {
       socketService.connect();
       socketService.on('messages created', (msg: Message) => this.addMessage(msg));
+      socketService.on('messages patched', (msg: Message) => this.updateMessage(msg));
+      socketService.on('messages typing', (data: any) => this.handleTyping(data, true));
+      socketService.on('messages stopTyping', (data: any) => this.handleTyping(data, false));
+      
       socketService.on('rooms created', (room: Room) => this.addRoom(room));
       socketService.on('friend-requests created', (req: FriendRequest) => this.addFriendRequest(req));
       socketService.on('friend-requests patched', (req: FriendRequest) => this.updateFriendRequest(req));

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { useChatStore } from '@/store/chat';
 import { useAuthStore } from '@/store/auth';
 import api from '@/api';
@@ -20,6 +20,7 @@ const searchError = ref('');
 // Chat Room state
 const messageText = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
+let typingTimeout: any = null;
 
 onMounted(async () => {
   chatStore.setupSocket();
@@ -33,6 +34,21 @@ onUnmounted(() => {
   chatStore.cleanupSocket();
 });
 
+// Watch for typing
+watch(messageText, () => {
+  if (chatStore.activeRoomId) {
+    if (!typingTimeout) {
+      chatStore.sendTyping(chatStore.activeRoomId, true);
+    }
+    
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      chatStore.sendTyping(chatStore.activeRoomId!, false);
+      typingTimeout = null;
+    }, 2000);
+  }
+});
+
 const scrollToBottom = async () => {
   await nextTick();
   if (messagesContainer.value) {
@@ -44,6 +60,12 @@ const selectRoom = async (roomId: string) => {
   chatStore.activeRoomId = roomId;
   await chatStore.fetchMessages(roomId);
   scrollToBottom();
+  
+  // Mark last message as read
+  if (chatStore.messages.length > 0) {
+    const lastMsg = chatStore.messages[chatStore.messages.length - 1];
+    chatStore.markAsRead(lastMsg._id);
+  }
 };
 
 const handleSearchUser = async () => {
@@ -89,24 +111,42 @@ const handleAccept = async (requestId: string) => {
 const handleSendMessage = async () => {
   if (!messageText.value.trim() || !chatStore.activeRoomId) return;
   const text = messageText.value;
+  const replyToId = chatStore.replyTo?._id;
+  
   messageText.value = '';
-  await chatStore.sendMessage(chatStore.activeRoomId, text);
+  if (typingTimeout) {
+    clearTimeout(typingTimeout);
+    chatStore.sendTyping(chatStore.activeRoomId, false);
+    typingTimeout = null;
+  }
+  
+  await chatStore.sendMessage(chatStore.activeRoomId, text, replyToId);
+  scrollToBottom();
 };
 
 const getRoomName = (room: any) => {
+  if (!room) return 'Loading...';
   if (room.name) return room.name;
-  // Fallback to participant usernames if available
-  return `Chat ${room._id.substring(0, 5)}`;
+  return `Chat Room`;
 };
 
 const getOtherUserId = (room: any) => {
   return room.participantIds?.find((id: string) => id !== authStore.user?._id) || '';
 };
 
+const getMessageById = (id: string) => {
+  return chatStore.messages.find(m => m._id === id);
+};
+
 const sortedMessages = computed(() => {
   return [...chatStore.messages].sort((a, b) => 
     new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
+});
+
+const typingText = computed(() => {
+  if (chatStore.currentTypingUsers.length === 0) return '';
+  return `Someone is typing...`;
 });
 
 const pendingRequests = computed(() => 
@@ -183,8 +223,11 @@ const pendingRequests = computed(() =>
     <div class="chat-main glass-card">
       <template v-if="chatStore.activeRoomId">
         <div class="chat-header">
-          <h2>{{ getRoomName(chatStore.activeRoom) }}</h2>
-          <span class="status">Online</span>
+          <div class="header-info">
+            <h2>{{ getRoomName(chatStore.activeRoom) }}</h2>
+            <span class="status" v-if="!typingText">Online</span>
+            <span class="typing-indicator" v-else>{{ typingText }}</span>
+          </div>
         </div>
 
         <div class="messages-container" ref="messagesContainer">
@@ -194,17 +237,41 @@ const pendingRequests = computed(() =>
             class="message-wrapper"
             :class="{ 'my-message': msg.userId === authStore.user?._id }"
           >
-            <div class="message-bubble">
-              <p>{{ msg.text }}</p>
-              <span class="timestamp">{{ new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
+            <!-- Reply Quoted Message -->
+            <div v-if="msg.replyToId" class="reply-quote">
+               <div class="quote-line"></div>
+               <div class="quote-content">
+                  <span class="quote-user">Replying to:</span>
+                  <p>{{ getMessageById(msg.replyToId)?.text || 'Message deleted' }}</p>
+               </div>
+            </div>
+
+            <div class="message-bubble-container">
+              <div class="message-bubble">
+                <p>{{ msg.text }}</p>
+                <div class="message-meta">
+                  <span class="timestamp">{{ new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
+                  <span v-if="msg.userId === authStore.user?._id && (msg.readBy?.length ?? 0) > 1" class="read-status">Seen</span>
+                </div>
+              </div>
+              <button class="reply-btn-inline" @click="chatStore.setReplyTo(msg)">↩</button>
             </div>
           </div>
         </div>
 
+        <!-- Reply Preview Area -->
+        <div v-if="chatStore.replyTo" class="reply-preview">
+          <div class="reply-info">
+            <span class="reply-label">Replying to message</span>
+            <p>{{ chatStore.replyTo.text }}</p>
+          </div>
+          <button class="close-reply" @click="chatStore.setReplyTo(null)">×</button>
+        </div>
+
         <div class="chat-input-area">
           <form @submit.prevent="handleSendMessage">
-            <input type="text" v-model="messageText" placeholder="Type a message..." />
-            <button type="submit" class="btn btn-primary">Send</button>
+            <input type="text" v-model="messageText" placeholder="Type a message..." @focus="chatStore.markAsRead(sortedMessages[sortedMessages.length-1]?._id)" />
+            <button type="submit" class="btn btn-primary" :disabled="!messageText.trim()">Send</button>
           </form>
         </div>
       </template>
@@ -432,6 +499,13 @@ const pendingRequests = computed(() =>
   font-weight: 600;
 }
 
+.typing-indicator {
+  font-size: 0.85rem;
+  color: var(--primary-color);
+  font-style: italic;
+  font-weight: 500;
+}
+
 .messages-container {
   flex: 1;
   overflow-y: auto;
@@ -444,15 +518,27 @@ const pendingRequests = computed(() =>
 .message-wrapper {
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
+}
+
+.message-bubble-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.my-message .message-bubble-container {
+  flex-direction: row-reverse;
 }
 
 .message-bubble {
-  max-width: 70%;
+  max-width: 80%;
   padding: 1rem 1.25rem;
   border-radius: 20px;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   position: relative;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .my-message {
@@ -466,15 +552,114 @@ const pendingRequests = computed(() =>
   border-bottom-right-radius: 4px;
 }
 
-.my-message .timestamp {
-  color: rgba(255, 255, 255, 0.7);
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  justify-content: flex-end;
 }
 
 .timestamp {
   font-size: 0.7rem;
   color: var(--text-secondary);
-  display: block;
-  margin-top: 0.5rem;
+}
+
+.my-message .timestamp {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.read-status {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Reply Quote */
+.reply-quote {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: -0.25rem;
+  padding: 0 1rem;
+  opacity: 0.8;
+}
+
+.my-message .reply-quote {
+  flex-direction: row-reverse;
+}
+
+.quote-line {
+  width: 3px;
+  background: var(--primary-color);
+  border-radius: 99px;
+  opacity: 0.5;
+}
+
+.quote-content {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.quote-user {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.reply-btn-inline {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.25rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: var(--transition);
+  padding: 0.5rem;
+}
+
+.message-wrapper:hover .reply-btn-inline {
+  opacity: 0.6;
+}
+
+.reply-btn-inline:hover {
+  opacity: 1 !important;
+  color: var(--primary-color);
+}
+
+/* Reply Preview */
+.reply-preview {
+  padding: 1rem 2rem;
+  background: rgba(0, 0, 0, 0.15);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  animation: slideUp 0.3s ease-out;
+}
+
+.reply-info {
+  border-left: 3px solid var(--primary-color);
+  padding-left: 1rem;
+}
+
+.reply-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+.close-reply {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
 }
 
 .chat-input-area {

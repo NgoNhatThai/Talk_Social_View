@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import api from '@/api';
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 
 const phoneNumber = ref('');
 const password = ref('');
 const rememberMe = ref(true);
 const loading = ref(false);
-const errorMsg = ref('');
+const errorMsg = ref(route.query.expired ? 'Session expired. Please log in again.' : '');
 
 const handleLogin = async () => {
   if (!phoneNumber.value || !password.value) {
@@ -29,10 +30,10 @@ const handleLogin = async () => {
       password: password.value,
     });
 
-    const { accessToken, user } = response.data;
+    const { accessToken, refreshToken, user } = response.data;
     
-    // Save token to cookie (with rememberMe logic)
-    authStore.setToken(accessToken, rememberMe.value);
+    // Save tokens to cookie (with rememberMe logic)
+    authStore.setTokens(accessToken, refreshToken, rememberMe.value);
     authStore.setUser(user);
 
     // Redirect to chats

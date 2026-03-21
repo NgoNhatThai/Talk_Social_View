@@ -30,12 +30,11 @@ export const useAuthStore = defineStore('auth', {
   },
 
   actions: {
-    setToken(token: string, remember: boolean) {
-      if (remember) {
-        Cookies.set('accessToken', token, { expires: 7 });
-      } else {
-        Cookies.set('accessToken', token);
-      }
+    setTokens(accessToken: string, refreshToken: string, remember: boolean) {
+      const options = remember ? { expires: 7 } : {};
+      Cookies.set('accessToken', accessToken, options);
+      // Refresh token usually has a longer expiration, e.g., 3 days as per doc
+      Cookies.set('refreshToken', refreshToken, { expires: 3 });
     },
 
     setUser(user: User | null) {
@@ -52,15 +51,37 @@ export const useAuthStore = defineStore('auth', {
         this.user = response.data;
       } catch (err: any) {
         console.error('Fetch profile failed', err);
-        this.logout();
+        // If 401, the interceptor will handle refresh. 
+        // We only logout if everything fails.
       } finally {
         this.loading = false;
       }
     },
 
+    async refresh() {
+      const refreshToken = Cookies.get('refreshToken');
+      if (!refreshToken) throw new Error('No refresh token available');
+
+      try {
+        const response = await api.post('/authentication/refresh', { refreshToken });
+        const { accessToken: newAccess, refreshToken: newRefresh, user } = response.data;
+        
+        // Update cookies
+        this.setTokens(newAccess, newRefresh, true);
+        if (user) this.setUser(user);
+        
+        return newAccess;
+      } catch (err) {
+        this.logout();
+        throw err;
+      }
+    },
+
     logout() {
       Cookies.remove('accessToken');
+      Cookies.remove('refreshToken');
       this.user = null;
+      window.location.href = '/login?expired=true';
     },
   },
 });
