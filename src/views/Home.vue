@@ -10,7 +10,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="fade-in">
+  <div class="container fade-in">
     <section class="hero">
       <h1>Welcome to <span class="gradient-text">TALK SOCIAL</span></h1>
       <p>A high-performance codebase integrated with your local backend at port 3030.</p>

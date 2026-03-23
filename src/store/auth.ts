@@ -63,7 +63,7 @@ export const useAuthStore = defineStore('auth', {
       if (!refreshToken) throw new Error('No refresh token available');
 
       try {
-        const response = await api.post('/authentication/refresh', { refreshToken });
+        const response = await api.post('/refresh-token', { refreshToken });
         const { accessToken: newAccess, refreshToken: newRefresh, user } = response.data;
         
         // Update cookies

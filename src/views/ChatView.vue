@@ -57,7 +57,7 @@ watch(messageText, () => {
 const scrollToBottom = async () => {
   await nextTick();
   if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+    messagesContainer.value.scrollTop = 0;
   }
 };
 
@@ -75,7 +75,7 @@ const selectRoom = async (roomId: string) => {
   
   // Mark last message as read
   if (chatStore.messages.length > 0) {
-    const lastMsg = chatStore.messages[chatStore.messages.length - 1];
+    const lastMsg = chatStore.messages[0];
     chatStore.markAsRead(lastMsg._id);
   }
 };
@@ -157,7 +157,7 @@ const getMessageById = (id: string) => {
 
 const sortedMessages = computed(() => {
   return [...chatStore.messages].sort((a, b) => 
-    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 });
 
@@ -169,6 +169,30 @@ const typingText = computed(() => {
 const pendingRequests = computed(() => 
   chatStore.friendRequests.filter(r => r.status === 'pending')
 );
+
+const loadMoreObserver = ref<IntersectionObserver | null>(null);
+const sentinel = ref<HTMLElement | null>(null);
+
+onMounted(() => {
+  chatStore.setupSocket(); // Ensure socket is setup as it was previously
+  chatStore.fetchRooms();
+
+  loadMoreObserver.value = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && !chatStore.loading && chatStore.activeRoomId && chatStore.messages.length >= 20) {
+      console.log('🔄 Reached top, loading more messages...');
+      chatStore.fetchMessages(chatStore.activeRoomId, true);
+    }
+  }, { threshold: 0.1 });
+  
+  if (sentinel.value) {
+    loadMoreObserver.value.observe(sentinel.value);
+  }
+});
+
+onUnmounted(() => {
+  loadMoreObserver.value?.disconnect();
+  chatStore.cleanupSocket();
+});
 </script>
 
 <template>
@@ -274,6 +298,7 @@ const pendingRequests = computed(() =>
               <button class="reply-btn-inline" @click="chatStore.setReplyTo(msg)">↩</button>
             </div>
           </div>
+          <div ref="sentinel" style="height: 1px;"></div>
         </div>
 
         <!-- Reply Preview Area -->
@@ -339,8 +364,8 @@ const pendingRequests = computed(() =>
   grid-template-columns: 350px 1fr;
   gap: 1.5rem;
   height: calc(100vh - 160px);
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
+  padding: 1.5rem 2rem;
 }
 
 /* Sidebar */
@@ -526,9 +551,9 @@ const pendingRequests = computed(() =>
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 2rem;
+  padding: 1.5rem 2rem;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse; /* NEWEST at bottom naturally */
   gap: 1.5rem;
 }
 
@@ -759,6 +784,18 @@ const pendingRequests = computed(() =>
 .modal-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+/* Hide Scrollbars */
+.sidebar-content::-webkit-scrollbar,
+.messages-container::-webkit-scrollbar {
+  display: none;
+}
+
+.sidebar-content,
+.messages-container {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 @media (max-width: 900px) {

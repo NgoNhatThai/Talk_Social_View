@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import { useAuthStore, type Video, type User } from '@/store/auth';
 import { socketService } from '@/services/socket';
 import api from '@/api';
+import { toast } from 'vue-sonner';
 
 const route = useRoute();
 const authStore = useAuthStore();
@@ -60,8 +61,9 @@ const handleAddVideo = async () => {
     showAddVideo.value = false;
     videoUrl.value = '';
     videoTitle.value = '';
+    toast.success('Video added successfully!');
   } catch (err: any) {
-    alert('Failed to add video. Please check the URL.');
+    toast.error('Failed to add video. Please check the URL.');
   } finally {
     addingVideo.value = false;
   }
@@ -115,7 +117,7 @@ watch(() => route.params.id, () => {
 </script>
 
 <template>
-  <div class="profile-view fade-in">
+  <div class="profile-view container fade-in">
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
       <p>Loading profile...</p>

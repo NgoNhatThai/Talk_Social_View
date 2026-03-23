@@ -1,5 +1,5 @@
 <template>
-  <div class="fade-in">
+  <div class="container fade-in">
     <section class="about-hero">
       <h1>Built for <span class="gradient-text">Performance</span></h1>
       <p>This FE source base is engineered with modern best practices, focusing on speed, developer experience, and stunning aesthetics.</p>

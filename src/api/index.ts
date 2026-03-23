@@ -32,7 +32,7 @@ api.interceptors.response.use(
     const authStore = useAuthStore();
 
     if (error.response?.status === 401 && !originalRequest._retry) {
-      if (originalRequest.url === '/authentication/refresh' || originalRequest.url === '/authentication') {
+      if (originalRequest.url === '/refresh-token') {
          // If token is invalid at these endpoints, just logout
          authStore.logout();
          return Promise.reject(error);

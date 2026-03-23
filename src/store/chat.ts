@@ -37,6 +37,7 @@ export const useChatStore = defineStore('chat', {
     activeRoomId: null as string | null,
     loading: false,
     searchQuery: '',
+    hasMore: true,
     typingUsers: {} as { [roomId: string]: string[] },
     replyTo: null as Message | null,
   }),
@@ -62,12 +63,34 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
-    async fetchMessages(roomId: string) {
+    async fetchMessages(roomId: string, loadMore: boolean = false) {
+      if (!loadMore) {
+        this.messages = [];
+        this.hasMore = true;
+      }
+      
+      if (!this.hasMore && loadMore) return;
+      
+      this.loading = true;
       try {
-        const response = await api.get(`/messages?roomId=${roomId}`);
-        this.messages = response.data.data || response.data;
+        const limit = 30;
+        const skip = loadMore ? this.messages.length : 0;
+        const response = await api.get(`/messages?roomId=${roomId}&$limit=${limit}&$skip=${skip}&$sort[createdAt]=-1`);
+        const newMessages = response.data.data || response.data;
+        
+        if (newMessages.length < limit) {
+          this.hasMore = false;
+        }
+
+        if (loadMore) {
+          this.messages = [...this.messages, ...newMessages];
+        } else {
+          this.messages = newMessages;
+        }
       } catch (err) {
         console.error('Fetch messages error:', err);
+      } finally {
+        this.loading = false;
       }
     },
 
@@ -137,7 +160,7 @@ export const useChatStore = defineStore('chat', {
         console.log('✅ Room match! Pushing message.');
         // Avoid duplicates if any
         if (!this.messages.some(m => m._id === message._id)) {
-          this.messages.push(message);
+          this.messages.unshift(message);
         }
         // If I'm viewing this room, marks as read automatically
         this.markAsRead(message._id);
