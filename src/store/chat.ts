@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import api from '@/api';
 import { socketService } from '@/services/socket';
+import { useAuthStore } from './auth';
 
 export interface Message {
   _id: string;
@@ -108,7 +109,10 @@ export const useChatStore = defineStore('chat', {
 
     async sendFriendRequest(toUserId: string) {
       try {
-        await api.post('/friend-requests', { toUserId });
+        const authStore = useAuthStore();
+        const fromUserId = authStore.user?._id;
+        console.log(fromUserId);
+        await api.post('/friend-requests', { toUserId, fromUserId });
       } catch (err) {
         console.error('Send friend request error:', err);
       }
@@ -124,14 +128,30 @@ export const useChatStore = defineStore('chat', {
 
     // Handlers for Socket events
     addMessage(message: Message) {
-      if (this.activeRoomId === message.roomId) {
-        this.messages.push(message);
+      console.log('📬 addMessage called with:', message);
+      console.log('Current activeRoomId:', this.activeRoomId);
+      
+      // Defensive check: ensure both are strings for comparison
+      if (String(this.activeRoomId) === String(message.roomId)) {
+        console.log('✅ Room match! Pushing message.');
+        // Avoid duplicates if any
+        if (!this.messages.some(m => m._id === message._id)) {
+          this.messages.push(message);
+        }
         // If I'm viewing this room, marks as read automatically
         this.markAsRead(message._id);
+      } else {
+        console.warn('❌ Room ID mismatch. Message roomId:', message.roomId, 'ActiveRoomId:', this.activeRoomId);
       }
-      // Update room's last message
-      const room = this.rooms.find(r => r._id === message.roomId);
-      if (room) room.lastMessageId = message._id;
+      
+      // Update room's last message and potentially move to top
+      const roomIdx = this.rooms.findIndex(r => r._id === message.roomId);
+      if (roomIdx !== -1) {
+        this.rooms[roomIdx].lastMessageId = message._id;
+        // Optionally move room to top of list as it has new activity
+        const room = this.rooms.splice(roomIdx, 1)[0];
+        this.rooms.unshift(room);
+      }
     },
 
     updateMessage(message: Message) {
@@ -168,7 +188,24 @@ export const useChatStore = defineStore('chat', {
 
     setupSocket() {
       socketService.connect();
-      socketService.on('messages created', (msg: Message) => this.addMessage(msg));
+
+      // Explicitly authenticate socket to join channels defined in channels.ts
+      const authStore = useAuthStore();
+      const token = (authStore as any).accessToken || (authStore as any).token || document.cookie.split('accessToken=')[1]?.split(';')[0];
+      
+      if (token) {
+        console.log('🔑 Authenticating socket...');
+        socketService.emit('create', 'authentication', {
+          strategy: 'jwt',
+          accessToken: token
+        });
+      }
+
+      socketService.on('messages created', (msg: Message) => {
+        console.log('📩 Message received via socket:', msg);
+        this.addMessage(msg);
+      });
+      
       socketService.on('messages patched', (msg: Message) => this.updateMessage(msg));
       socketService.on('messages typing', (data: any) => this.handleTyping(data, true));
       socketService.on('messages stopTyping', (data: any) => this.handleTyping(data, false));
@@ -176,6 +213,10 @@ export const useChatStore = defineStore('chat', {
       socketService.on('rooms created', (room: Room) => this.addRoom(room));
       socketService.on('friend-requests created', (req: FriendRequest) => this.addFriendRequest(req));
       socketService.on('friend-requests patched', (req: FriendRequest) => this.updateFriendRequest(req));
+      
+      socketService.on('authenticated', (result: any) => {
+        console.log('🚀 Socket authenticated successfully:', result);
+      });
     },
 
     cleanupSocket() {

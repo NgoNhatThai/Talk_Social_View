@@ -2,6 +2,7 @@
 import { onMounted } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
+import { Toaster } from 'vue-sonner';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -53,6 +54,8 @@ const handleLogout = () => {
     <footer>
       <p>&copy; 2026 Talk Social. Powered by Vue 3 & Vite.</p>
     </footer>
+
+    <Toaster position="top-right" richColors />
   </div>
 </template>
 

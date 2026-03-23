@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { useChatStore } from '@/store/chat';
 import { useAuthStore } from '@/store/auth';
 import api from '@/api';
+import { toast } from 'vue-sonner';
 
 const chatStore = useChatStore();
 const authStore = useAuthStore();
@@ -25,10 +26,14 @@ let typingTimeout: any = null;
 onMounted(async () => {
   chatStore.setupSocket();
   await chatStore.fetchRooms();
-  // Fetch pending friend requests
-  const reqResponse = await api.get(`/friend-requests?toUserId=${authStore.user?._id}`);
-  chatStore.friendRequests = reqResponse.data.data || reqResponse.data;
 });
+
+watch(() => authStore.user?._id, async (newId) => {
+  if (newId) {
+    const reqResponse = await api.get(`/friend-requests?toUserId=${newId}`);
+    chatStore.friendRequests = reqResponse.data.data || reqResponse.data;
+  }
+}, { immediate: true });
 
 onUnmounted(() => {
   chatStore.cleanupSocket();
@@ -56,9 +61,16 @@ const scrollToBottom = async () => {
   }
 };
 
+// Auto-scroll on new messages
+watch(() => chatStore.messages.length, () => {
+  scrollToBottom();
+});
+
 const selectRoom = async (roomId: string) => {
+  console.log('🏘️ Selecting Room:', roomId);
   chatStore.activeRoomId = roomId;
   await chatStore.fetchMessages(roomId);
+  console.log('📚 Loaded messages for room:', roomId, chatStore.messages.length);
   scrollToBottom();
   
   // Mark last message as read
@@ -96,16 +108,21 @@ const handleSendRequest = async () => {
   try {
     await chatStore.sendFriendRequest(searchResult.value._id);
     showAddFriend.value = false;
-    alert('Friend request sent!');
+    toast.success('Friend request sent!');
   } catch (err) {
-    alert('Failed to send request.');
+    toast.error('Failed to send request.');
   }
 };
 
 const handleAccept = async (requestId: string) => {
-  await chatStore.handleFriendRequest(requestId, 'accepted');
-  // Refresh requests
-  chatStore.friendRequests = chatStore.friendRequests.filter(r => r._id !== requestId);
+  try {
+    await chatStore.handleFriendRequest(requestId, 'accepted');
+    // Refresh requests
+    chatStore.friendRequests = chatStore.friendRequests.filter(r => r._id !== requestId);
+    toast.success('Friend request accepted');
+  } catch (err) {
+    toast.error('Failed to accept request');
+  }
 };
 
 const handleSendMessage = async () => {
