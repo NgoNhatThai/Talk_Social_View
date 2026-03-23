@@ -8,6 +8,7 @@ export interface Message {
   roomId: string;
   text: string;
   userId: string;
+  senderId?: string; // Field to identify the sender
   createdAt: string;
   replyToId?: string;
   readBy?: string[];

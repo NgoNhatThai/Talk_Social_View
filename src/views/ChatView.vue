@@ -252,7 +252,7 @@ const pendingRequests = computed(() =>
             v-for="msg in sortedMessages" 
             :key="msg._id" 
             class="message-wrapper"
-            :class="{ 'my-message': msg.userId === authStore.user?._id }"
+            :class="{ 'my-message': String(msg.senderId || msg.userId) === String(authStore.user?._id) }"
           >
             <!-- Reply Quoted Message -->
             <div v-if="msg.replyToId" class="reply-quote">
@@ -268,7 +268,7 @@ const pendingRequests = computed(() =>
                 <p>{{ msg.text }}</p>
                 <div class="message-meta">
                   <span class="timestamp">{{ new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
-                  <span v-if="msg.userId === authStore.user?._id && (msg.readBy?.length ?? 0) > 1" class="read-status">Seen</span>
+                  <span v-if="String(msg.senderId || msg.userId) === String(authStore.user?._id) && (msg.readBy?.length ?? 0) > 1" class="read-status">✓✓</span>
                 </div>
               </div>
               <button class="reply-btn-inline" @click="chatStore.setReplyTo(msg)">↩</button>
@@ -564,9 +564,13 @@ const pendingRequests = computed(() =>
 
 .my-message .message-bubble {
   background: var(--primary-color);
-  color: white;
+  color: #ffffff;
   border: none;
   border-bottom-right-radius: 4px;
+}
+
+.my-message .message-bubble p {
+  color: #ffffff;
 }
 
 .message-meta {
