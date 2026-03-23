@@ -342,11 +342,13 @@ onUnmounted(() => {
         <div v-if="searchResult" class="search-result">
           <div class="user-card">
             <div class="avatar-circle large">{{ searchResult.username.charAt(0) }}</div>
-            <router-link :to="`/profile/${searchResult._id}`" class="user-info">
-              <strong>{{ searchResult.username }}</strong>
-              <span>{{ searchResult.phoneNumber }}</span>
-            </router-link>
-            <button class="btn btn-primary" @click="handleSendRequest">Add</button>
+            <div class="user-info">
+              <router-link :to="`/profile/${searchResult._id}`" class="user-details">
+                <strong>{{ searchResult.username }}</strong>
+                <span>{{ searchResult.phoneNumber }}</span>
+              </router-link>
+            </div>
+            <button class="add-btn-icon" @click="handleSendRequest" title="Add Friend">+</button>
           </div>
         </div>
 
@@ -753,7 +755,7 @@ onUnmounted(() => {
 
 .modal-content {
   width: 100%;
-  max-width: 400px;
+  max-width: 500px; /* Increased width */
   padding: 2.5rem;
   border-radius: 32px;
 }
@@ -773,12 +775,56 @@ onUnmounted(() => {
 .user-card {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.25rem;
   padding: 1.5rem;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 20px;
   margin-bottom: 1.5rem;
   border: 1px solid var(--border-color);
+}
+
+.user-info {
+  flex: 1;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  gap: 0.25rem;
+}
+
+.user-details strong {
+  font-size: 1.1rem;
+}
+
+.user-details span {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.add-btn-icon {
+  background: transparent;
+  border: none;
+  font-size: 2.5rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.5rem;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-btn-icon:hover {
+  transform: scale(1.2);
+  filter: brightness(1.2);
 }
 
 .modal-actions {
