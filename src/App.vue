@@ -3,6 +3,7 @@ import { onMounted } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { Toaster } from 'vue-sonner';
+import { LogOutIcon } from 'lucide-vue-next';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -31,15 +32,13 @@ const handleLogout = () => {
               <span class="avatar-sm">{{ authStore.user.username?.charAt(0) || 'U' }}</span>
               <span class="username">{{ authStore.user.username }}</span>
             </router-link>
-            <button @click="handleLogout" class="btn btn-ghost btn-xs">Logout</button>
+            <button @click="handleLogout" class="btn" style="padding: 0.5rem;">Logout</button>
           </div>
         </template>
         <template v-else>
           <router-link to="/login" class="nav-link">Sign In</router-link>
           <router-link to="/register" class="btn btn-primary btn-sm">Join Free</router-link>
         </template>
-        
-        <a href="http://localhost:3030" target="_blank" class="nav-link backend-link">API ↗</a>
       </nav>
     </header>
 
@@ -111,9 +110,9 @@ nav {
   align-items: center;
   gap: 1rem;
   padding: 0.25rem 0.5rem 0.25rem 1rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
   border-radius: 12px;
-  border: 1px solid var(--border-color);
+  border: none;
 }
 
 .username-link {

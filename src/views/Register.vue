@@ -124,8 +124,8 @@ const handleRegister = async () => {
                 @click="showPassword = !showPassword"
                 tabindex="-1"
               >
-                <span v-if="showPassword">👁️</span>
-                <span v-else>👁️‍🗨️</span>
+                <span v-if="showPassword"><EyeOffIcon :size="20" /></span>
+                <span v-else><EyeIcon :size="20" /></span>
               </button>
             </div>
           </div>
