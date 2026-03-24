@@ -23,21 +23,12 @@ const messageText = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
 let typingTimeout: any = null;
 
-onMounted(async () => {
-  chatStore.setupSocket();
-  await chatStore.fetchRooms();
-});
-
 watch(() => authStore.user?._id, async (newId) => {
   if (newId) {
     const reqResponse = await api.get(`/friend-requests?toUserId=${newId}`);
     chatStore.friendRequests = reqResponse.data.data || reqResponse.data;
   }
 }, { immediate: true });
-
-onUnmounted(() => {
-  chatStore.cleanupSocket();
-});
 
 // Watch for typing
 watch(messageText, () => {
@@ -163,10 +154,11 @@ const sortedMessages = computed(() => {
 
 const typingText = computed(() => {
   if (chatStore.currentTypingUsers.length === 0) return '';
-  return `Someone is typing...`;
+  return `Typing ...`;
 });
 
 const isRoomUnread = (room: any) => {
+  if (room._id === chatStore.activeRoomId) return false;
   if (!room.lastMessageId || !authStore.user?._id) return false;
   return String(room.lastMessageSenderId) !== String(authStore.user._id) && 
          !room.lastMessageReadBy?.includes(authStore.user._id);
@@ -269,7 +261,7 @@ onUnmounted(() => {
         <div v-else class="requests-list">
           <div v-for="req in pendingRequests" :key="req._id" class="request-item">
             <div class="req-info">
-              <span>Request from: {{ req.fromUserId.substring(0, 8) }}...</span>
+              <span>Request from: {{ req.fromUser?.username?.substring(0, 8) }}...</span>
             </div>
             <div class="req-actions">
               <button class="btn btn-xs btn-primary" @click="handleAccept(req._id)">Accept</button>
@@ -289,8 +281,7 @@ onUnmounted(() => {
         <div class="chat-header">
           <div class="header-info">
             <h2>{{ getRoomName(chatStore.activeRoom) }}</h2>
-            <span class="status" v-if="!typingText">Online</span>
-            <span class="typing-indicator" v-else>{{ typingText }}</span>
+            <span class="status">Online</span>
           </div>
         </div>
 
@@ -331,6 +322,10 @@ onUnmounted(() => {
             <p>{{ chatStore.replyTo.text }}</p>
           </div>
           <button class="close-reply" @click="chatStore.setReplyTo(null)">×</button>
+        </div>
+
+        <div v-if="typingText" class="typing-status-inline">
+          {{ typingText }}
         </div>
 
         <div class="chat-input-area">
@@ -609,11 +604,12 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.typing-indicator {
-  font-size: 0.85rem;
+.typing-status-inline {
+  padding: 0.25rem 2rem;
+  font-size: 1rem;
   color: var(--primary-color);
   font-style: italic;
-  font-weight: 500;
+  opacity: 0.8;
 }
 
 .messages-container {

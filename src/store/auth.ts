@@ -59,29 +59,33 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async refresh() {
-      const refreshToken = Cookies.get('refreshToken');
-      if (!refreshToken) throw new Error('No refresh token available');
+  const refreshToken = Cookies.get('refreshToken');
+  if (!refreshToken) throw new Error('No refresh token available');
 
-      try {
-        const response = await api.post('/refresh-token', { refreshToken });
-        const { accessToken: newAccess, refreshToken: newRefresh, user } = response.data;
-        
-        // Update cookies
-        this.setTokens(newAccess, newRefresh, true);
-        if (user) this.setUser(user);
-        
-        return newAccess;
-      } catch (err) {
-        this.logout();
-        throw err;
-      }
-    },
+  try {
+    const response = await api.post('/refresh-token', { refreshToken });
 
-    logout() {
-      Cookies.remove('accessToken');
-      Cookies.remove('refreshToken');
-      this.user = null;
-      window.location.href = '/login?expired=true';
-    },
+    const { accessToken: newAccess, refreshToken: newRefresh, user } = response.data.data;
+
+    // Update cookies
+    this.setTokens(newAccess, newRefresh, true);
+
+    if (user) this.setUser(user);
+
+    return newAccess;
+  } catch (err) {
+    this.logout();
+    throw err;
+  }
+},
+
+logout() {
+  Cookies.remove('accessToken');
+  Cookies.remove('refreshToken');
+  this.user = null;
+
+  window.location.href = '/login?expired=true';
+},
+
   },
 });

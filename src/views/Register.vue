@@ -11,7 +11,9 @@ const phoneNumber = ref('');
 const username = ref('');
 const email = ref('');
 const password = ref('');
+const showPassword = ref(false);
 const confirmPassword = ref('');
+const showConfirmPassword = ref(false);
 
 const loading = ref(false);
 const errorMsg = ref('');
@@ -109,22 +111,44 @@ const handleRegister = async () => {
         <div class="form-grid">
           <div class="form-group">
             <label>Password</label>
-            <input 
-              v-model="password" 
-              type="password" 
-              placeholder="••••••••" 
-              required 
-            />
+            <div class="password-input-wrapper">
+              <input 
+                v-model="password" 
+                :type="showPassword ? 'text' : 'password'" 
+                placeholder="••••••••" 
+                required 
+              />
+              <button 
+                type="button" 
+                class="password-toggle" 
+                @click="showPassword = !showPassword"
+                tabindex="-1"
+              >
+                <span v-if="showPassword">👁️</span>
+                <span v-else>👁️‍🗨️</span>
+              </button>
+            </div>
           </div>
-
+  
           <div class="form-group">
             <label>Confirm Password</label>
-            <input 
-              v-model="confirmPassword" 
-              type="password" 
-              placeholder="••••••••" 
-              required 
-            />
+            <div class="password-input-wrapper">
+              <input 
+                v-model="confirmPassword" 
+                :type="showConfirmPassword ? 'text' : 'password'" 
+                placeholder="••••••••" 
+                required 
+              />
+              <button 
+                type="button" 
+                class="password-toggle" 
+                @click="showConfirmPassword = !showConfirmPassword"
+                tabindex="-1"
+              >
+                <span v-if="showConfirmPassword">👁️</span>
+                <span v-else>👁️‍🗨️</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -251,4 +275,36 @@ const handleRegister = async () => {
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper input {
+  width: 100%;
+  padding-right: 3rem;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  opacity: 0.6;
+  user-select: none;
+}
+
+.password-toggle:hover {
+  opacity: 1;
+}
+
 </style>

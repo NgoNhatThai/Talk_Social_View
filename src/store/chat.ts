@@ -31,6 +31,12 @@ export interface FriendRequest {
   fromUserId: string;
   toUserId: string;
   status: 'pending' | 'accepted' | 'rejected';
+  fromUser: {
+    _id: string;
+    username: string;
+    phoneNumber: string;
+    email: string;
+  }
 }
 
 export const useChatStore = defineStore('chat', {
@@ -42,7 +48,7 @@ export const useChatStore = defineStore('chat', {
     loading: false,
     searchQuery: '',
     hasMore: true,
-    typingUsers: {} as { [roomId: string]: string[] },
+    typingUsers: {} as { [roomId: string]: { userId: string, username: string }[] },
     replyTo: null as Message | null,
   }),
 
@@ -61,7 +67,11 @@ export const useChatStore = defineStore('chat', {
       });
     },
     activeRoom: (state) => state.rooms.find(r => r._id === state.activeRoomId),
-    currentTypingUsers: (state) => state.activeRoomId ? state.typingUsers[state.activeRoomId] || [] : [],
+    currentTypingUsers: (state) => {
+      if (!state.activeRoomId) return [];
+      const roomIdStr = String(state.activeRoomId);
+      return state.typingUsers[roomIdStr] || [];
+    },
   },
 
   actions: {
@@ -118,15 +128,16 @@ export const useChatStore = defineStore('chat', {
 
     async markAsRead(messageId: string) {
       try {
-        await api.patch(`/messages/${messageId}`, { readBy: [] });
+        await api.patch(`/messages/${messageId}`, { isSeen: true });
       } catch (err) {
         console.error('Mark as read error:', err);
       }
     },
 
     sendTyping(roomId: string, isTyping: boolean) {
-      const event = isTyping ? 'typing' : 'stopTyping';
-      socketService.emit(`messages ${event}`, { roomId });
+      const method = isTyping ? 'typing' : 'stopTyping';
+      // Use standard Feathers method call format for custom methods
+      socketService.emit(method, 'messages', { roomId });
     },
 
     setReplyTo(message: Message | null) {
@@ -201,14 +212,30 @@ export const useChatStore = defineStore('chat', {
        }
     },
 
-    handleTyping(data: { roomId: string, userId: string }, isTyping: boolean) {
-      if (!this.typingUsers[data.roomId]) this.typingUsers[data.roomId] = [];
-      const users = this.typingUsers[data.roomId];
+    handleTyping(data: { roomId: string, userId: string, username: string }, isTyping: boolean) {
+      const authStore = useAuthStore();
+      // Ignore our own typing events
+      if (String(data.userId) === String(authStore.user?._id)) return;
+
+      console.log(`👤 User ${data.username} (${data.userId}) is ${isTyping ? 'typing' : 'stopped typing'} in room ${data.roomId}`);
+
+      const roomIdStr = String(data.roomId);
+      const currentUsers = this.typingUsers[roomIdStr] || [];
+      let newUsers: { userId: string, username: string }[];
+
       if (isTyping) {
-        if (!users.includes(data.userId)) users.push(data.userId);
+        newUsers = currentUsers.some(u => u.userId === data.userId) 
+          ? currentUsers 
+          : [...currentUsers, { userId: data.userId, username: data.username }];
       } else {
-        this.typingUsers[data.roomId] = users.filter(id => id !== data.userId);
+        newUsers = currentUsers.filter(u => u.userId !== data.userId);
       }
+
+      // Replace the object with String key to ensure Pinia/Vue reactivity detects the change
+      this.typingUsers = {
+        ...this.typingUsers,
+        [roomIdStr]: newUsers
+      };
     },
 
     addRoom(room: Room) {
