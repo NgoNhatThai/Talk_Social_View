@@ -4,15 +4,30 @@ import { useChatStore } from '@/store/chat';
 import { useAuthStore } from '@/store/auth';
 import api from '@/api';
 import { toast } from 'vue-sonner';
+import { uploadToCloudinary } from '@/services/cloudinary';
+import {
+  Image as ImageIcon,
+  Paperclip as PaperclipIcon,
+  Download as DownloadIcon,
+  CornerUpLeft as ReplyIcon,
+  MessageSquare as MessageSquareIcon,
+  Plus as PlusIcon,
+  Search as SearchIcon,
+  X as XIcon,
+  File as FileIcon,
+  Send as SendIcon,
+  UserPlus as UserPlusIcon
+} from 'lucide-vue-next';
 
 const chatStore = useChatStore();
 const authStore = useAuthStore();
 
-// Sidebar state
-const activeTab = ref<'rooms' | 'requests'>('rooms');
-
-// Modal state
+// UI Refs
+const fileInput = ref<HTMLInputElement | null>(null);
+const uploading = ref(false);
+const previewImage = ref<string | null>(null);
 const showAddFriend = ref(false);
+const activeTab = ref<'rooms' | 'requests'>('rooms');
 const searchPhone = ref('');
 const searchResult = ref<any>(null);
 const searchLoading = ref(false);
@@ -116,7 +131,45 @@ const handleAccept = async (requestId: string) => {
   }
 };
 
-const handleSendMessage = async () => {
+const triggerFileInput = (type: 'image' | 'file') => {
+  if (fileInput.value) {
+    fileInput.value.setAttribute('accept', type === 'image' ? 'image/*' : '*/*');
+    fileInput.value.click();
+  }
+};
+
+const handleFileChange = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file || !chatStore.activeRoomId) return;
+
+  uploading.value = true;
+  try {
+    const isImage = file.type.startsWith('image/');
+    const type: 'image' | 'file' = isImage ? 'image' : 'file';
+    
+    toast.promise(uploadToCloudinary(file), {
+      loading: `Uploading ${type}...`,
+      success: async (result: any) => {
+        await chatStore.sendMessage(chatStore.activeRoomId!, result.secure_url, undefined, type);
+        uploading.value = false;
+        scrollToBottom();
+        return 'Sent successfully';
+      },
+      error: (err: any) => {
+        uploading.value = false;
+        return `Upload failed: ${err.message}`;
+      }
+    });
+  } catch (err: any) {
+    console.error('File drop error:', err);
+    uploading.value = false;
+  } finally {
+    target.value = ''; // Reset input
+  }
+};
+
+const handleSendMessage = async (type: 'text' | 'image' | 'file' = 'text') => {
   if (!messageText.value.trim() || !chatStore.activeRoomId) return;
   const text = messageText.value;
   const replyToId = chatStore.replyTo?._id;
@@ -128,7 +181,7 @@ const handleSendMessage = async () => {
     typingTimeout = null;
   }
   
-  await chatStore.sendMessage(chatStore.activeRoomId, text, replyToId);
+  await chatStore.sendMessage(chatStore.activeRoomId, text, replyToId, type);
   scrollToBottom();
 };
 
@@ -209,12 +262,13 @@ onUnmounted(() => {
     <!-- Sidebar -->
     <div class="sidebar glass-card">
       <div class="sidebar-header">
-        <div class="search-bar">
-          <input type="text" placeholder="Search chats..." v-model="chatStore.searchQuery" />
-        </div>
-        <button class="btn btn-primary add-friend-btn" @click="showAddFriend = true">
-          <span class="icon">+</span>
-        </button>
+          <div class="search-box">
+            <SearchIcon :size="18" class="search-icon" />
+            <input type="text" v-model="chatStore.searchQuery" placeholder="Search friends..." />
+          </div>
+          <button class="add-btn" @click="showAddFriend = true" title="Add friend">
+            <UserPlusIcon :size="20" />
+          </button>
       </div>
 
       <div class="sidebar-tabs">
@@ -302,14 +356,42 @@ onUnmounted(() => {
             </div>
 
             <div class="message-bubble-container">
-              <div class="message-bubble">
-                <p>{{ msg.text }}</p>
+              <div class="message-bubble" :class="{ 'is-media': msg.type === 'image' || (msg.text.startsWith('https://res.cloudinary.com') && /\.(jpg|jpeg|png|webp|gif)$/i.test(msg.text)) }">
+                <!-- Cloudinary Image Special Handling -->
+                <div v-if="msg.type === 'image' || (msg.text.startsWith('https://res.cloudinary.com') && /\.(jpg|jpeg|png|webp|gif)$/i.test(msg.text))" class="message-image-container">
+                  <div class="message-image" @click="previewImage = msg.text">
+                    <img :src="msg.text" alt="Image attachment" loading="lazy" />
+                  </div>
+                  <a :href="msg.text" target="_blank" download class="download-btn-overlay" title="Download Image">
+                    <DownloadIcon :size="16" />
+                  </a>
+                </div>
+
+                <!-- Cloudinary File or Generic File Handling -->
+                <div v-else-if="msg.type === 'file' || msg.text.startsWith('https://res.cloudinary.com')" class="message-file">
+                   <div class="file-content-row">
+                     <FileIcon :size="20" class="file-icon" />
+                     <div class="file-info-compact">
+                       <span class="file-name-short">{{ msg.text.split('/').pop()?.substring(0, 15) || 'File' }}...</span>
+                     </div>
+                     <div class="file-actions-compact">
+                       <a :href="msg.text" target="_blank" download class="icon-action-btn" title="Download">
+                         <DownloadIcon :size="16" />
+                       </a>
+                     </div>
+                   </div>
+                </div>
+
+                <!-- Regular Text -->
+                <p v-else>{{ msg.text }}</p>
                 <div class="message-meta">
                   <span class="timestamp">{{ new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
                   <span v-if="String(msg.senderId || msg.userId) === String(authStore.user?._id) && (msg.readBy?.length ?? 0) > 1" class="read-status">✓✓</span>
                 </div>
               </div>
-              <button class="reply-btn-inline" @click="chatStore.setReplyTo(msg)">↩</button>
+              <button class="reply-btn-inline" @click="chatStore.setReplyTo(msg)">
+                <ReplyIcon :size="14" />
+              </button>
             </div>
           </div>
           <div ref="sentinel" style="height: 1px;"></div>
@@ -321,7 +403,9 @@ onUnmounted(() => {
             <span class="reply-label">Replying to message</span>
             <p>{{ chatStore.replyTo.text }}</p>
           </div>
-          <button class="close-reply" @click="chatStore.setReplyTo(null)">×</button>
+          <button class="close-reply" @click="chatStore.setReplyTo(null)">
+            <XIcon :size="18" />
+          </button>
         </div>
 
         <div v-if="typingText" class="typing-status-inline">
@@ -329,16 +413,67 @@ onUnmounted(() => {
         </div>
 
         <div class="chat-input-area">
-          <form @submit.prevent="handleSendMessage">
-            <input type="text" v-model="messageText" placeholder="Type a message..." @focus="chatStore.markAsRead(sortedMessages[sortedMessages.length-1]?._id)" />
-            <button type="submit" class="btn btn-primary" :disabled="!messageText.trim()">Send</button>
+          <!-- Hidden File Input -->
+          <input 
+            type="file" 
+            ref="fileInput" 
+            style="display: none" 
+            @change="handleFileChange" 
+          />
+
+          <form @submit.prevent="() => handleSendMessage()">
+            <div class="input-actions-left">
+              <button 
+                type="button" 
+                class="icon-btn" 
+                @click="triggerFileInput('image')" 
+                title="Send Image"
+                :disabled="uploading"
+              >
+                <ImageIcon :size="20" />
+              </button>
+              <button 
+                type="button" 
+                class="icon-btn" 
+                @click="triggerFileInput('file')" 
+                title="Send File"
+                :disabled="uploading"
+              >
+                <PaperclipIcon :size="20" />
+              </button>
+            </div>
+            
+            <input 
+              type="text" 
+              v-model="messageText" 
+              :placeholder="uploading ? 'Uploading...' : 'Type a message...'" 
+              @focus="chatStore.markAsRead(sortedMessages[sortedMessages.length-1]?._id)" 
+              :disabled="uploading"
+            />
+            
+            <button type="submit" class="btn btn-primary" :disabled="!messageText.trim() || uploading">
+              <SendIcon v-if="!uploading" :size="18" />
+              <span v-else>...</span>
+            </button>
           </form>
         </div>
       </template>
       <div v-else class="chat-placeholder">
-        <div class="placeholder-icon">💬</div>
+        <div class="placeholder-icon">
+          <MessageSquareIcon :size="64" />
+        </div>
         <h3>Select a chat to start messaging</h3>
         <p>Or find a friend using the + button.</p>
+      </div>
+    </div>
+
+    <!-- Image Preview Modal -->
+    <div v-if="previewImage" class="modal-overlay image-preview-overlay" @click="previewImage = null">
+      <div class="preview-content fade-in" @click.stop>
+        <img :src="previewImage" alt="Full Preview" />
+        <button class="close-preview" @click="previewImage = null">
+          <XIcon :size="32" />
+        </button>
       </div>
     </div>
 
@@ -596,6 +731,267 @@ onUnmounted(() => {
   padding: 1.5rem 2rem;
   border-bottom: 1px solid var(--border-color);
   background: rgba(0, 0, 0, 0.1);
+}
+
+.chat-input-area form {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.input-actions-left {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  color: white;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 12px;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.icon-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.message-bubble.is-media {
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  position: relative;
+}
+
+.message-image-container {
+  position: relative;
+}
+
+.download-btn-overlay {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 1rem;
+  opacity: 0;
+  transition: var(--transition);
+}
+
+.message-image-container:hover .download-btn-overlay {
+  opacity: 1;
+}
+
+.sidebar-header {
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.search-box {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 0.75rem 0.75rem 0.75rem 2.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: white;
+  font-size: 0.9rem;
+  transition: var(--transition);
+}
+
+.search-box input:focus {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--primary-color);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+}
+
+.add-btn {
+  width: 42px;
+  height: 42px;
+  background: var(--accent-gradient);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: var(--shadow-md);
+}
+
+.add-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  filter: brightness(1.1);
+}
+
+.sidebar-tabs {
+  display: flex;
+  padding: 0 1.5rem;
+  margin-bottom: 1rem;
+  gap: 0.5rem;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 0.6rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.tab-btn.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.message-image {
+  max-width: 300px;
+  max-height: 400px;
+  overflow: hidden;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.message-image:hover {
+  opacity: 0.9;
+}
+
+.message-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.message-file {
+  padding: 0.5rem 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  min-width: 200px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.file-content-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.file-icon {
+  color: var(--primary-color);
+}
+
+.file-info-compact {
+  flex: 1;
+  overflow: hidden;
+}
+
+.file-name-short {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.file-actions-compact {
+  display: flex;
+  align-items: center;
+}
+
+.icon-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+.icon-action-btn:hover {
+  background: var(--primary-color);
+}
+
+/* Image Preview Modal */
+.image-preview-overlay {
+  background: rgba(0, 0, 0, 0.95) !important;
+}
+
+.preview-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.preview-content img {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+}
+
+.close-preview {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 3rem;
+  cursor: pointer;
 }
 
 .status {

@@ -12,6 +12,7 @@ export interface Message {
   createdAt: string;
   replyToId?: string;
   readBy?: string[];
+  type?: 'text' | 'image' | 'file';
 }
 
 export interface Room {
@@ -115,10 +116,11 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
-    async sendMessage(roomId: string, text: string, replyToId?: string) {
+    async sendMessage(roomId: string, text: string, replyToId?: string, type: 'text' | 'image' | 'file' = 'text') {
       try {
-        const payload: any = { roomId, text };
+        const payload: any = { roomId, text, type };
         if (replyToId) payload.replyToId = replyToId;
+        console.log('📤 Sending message payload:', payload);
         await api.post('/messages', payload);
         this.replyTo = null; // Clear reply after send
       } catch (err) {
