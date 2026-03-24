@@ -18,6 +18,10 @@ export interface Room {
   _id: string;
   participantIds: string[];
   lastMessageId?: string;
+  lastMessageAt?: string;
+  lastMessageContent?: string;
+  lastMessageSenderId?: string;
+  lastMessageReadBy?: string[];
   name?: string; // Derived from participants
   participants?: any[];
 }
@@ -44,10 +48,17 @@ export const useChatStore = defineStore('chat', {
 
   getters: {
     filteredRooms: (state) => {
-      if (!state.searchQuery) return state.rooms;
-      return state.rooms.filter(room => 
-        room.name?.toLowerCase().includes(state.searchQuery.toLowerCase())
-      );
+      let filtered = state.rooms;
+      if (state.searchQuery) {
+        filtered = state.rooms.filter(room => 
+          room.name?.toLowerCase().includes(state.searchQuery.toLowerCase())
+        );
+      }
+      return [...filtered].sort((a, b) => {
+        const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return timeB - timeA;
+      });
     },
     activeRoom: (state) => state.rooms.find(r => r._id === state.activeRoomId),
     currentTypingUsers: (state) => state.activeRoomId ? state.typingUsers[state.activeRoomId] || [] : [],
@@ -172,6 +183,11 @@ export const useChatStore = defineStore('chat', {
       const roomIdx = this.rooms.findIndex(r => r._id === message.roomId);
       if (roomIdx !== -1) {
         this.rooms[roomIdx].lastMessageId = message._id;
+        this.rooms[roomIdx].lastMessageContent = message.text;
+        this.rooms[roomIdx].lastMessageSenderId = message.senderId || message.userId;
+        this.rooms[roomIdx].lastMessageReadBy = message.readBy || [];
+        this.rooms[roomIdx].lastMessageAt = message.createdAt;
+
         // Optionally move room to top of list as it has new activity
         const room = this.rooms.splice(roomIdx, 1)[0];
         this.rooms.unshift(room);
@@ -197,6 +213,14 @@ export const useChatStore = defineStore('chat', {
 
     addRoom(room: Room) {
       this.rooms.unshift(room);
+    },
+
+    updateRoom(room: Room) {
+      const idx = this.rooms.findIndex(r => r._id === room._id);
+      if (idx !== -1) {
+        // Merge the update into existing room
+        this.rooms[idx] = { ...this.rooms[idx], ...room };
+      }
     },
 
     addFriendRequest(request: FriendRequest) {
@@ -235,6 +259,7 @@ export const useChatStore = defineStore('chat', {
       socketService.on('messages stopTyping', (data: any) => this.handleTyping(data, false));
       
       socketService.on('rooms created', (room: Room) => this.addRoom(room));
+      socketService.on('rooms patched', (room: Room) => this.updateRoom(room));
       socketService.on('friend-requests created', (req: FriendRequest) => this.addFriendRequest(req));
       socketService.on('friend-requests patched', (req: FriendRequest) => this.updateFriendRequest(req));
       

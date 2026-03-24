@@ -74,9 +74,9 @@ const selectRoom = async (roomId: string) => {
   scrollToBottom();
   
   // Mark last message as read
-  if (chatStore.messages.length > 0) {
-    const lastMsg = chatStore.messages[0];
-    chatStore.markAsRead(lastMsg._id);
+  const room = chatStore.rooms.find(r => r._id === roomId);
+  if (room && room.lastMessageId && isRoomUnread(room)) {
+    chatStore.markAsRead(room.lastMessageId);
   }
 };
 
@@ -166,6 +166,23 @@ const typingText = computed(() => {
   return `Someone is typing...`;
 });
 
+const isRoomUnread = (room: any) => {
+  if (!room.lastMessageId || !authStore.user?._id) return false;
+  return String(room.lastMessageSenderId) !== String(authStore.user._id) && 
+         !room.lastMessageReadBy?.includes(authStore.user._id);
+};
+
+const formatLastMessageTime = (dateString?: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+
 const pendingRequests = computed(() => 
   chatStore.friendRequests.filter(r => r.status === 'pending')
 );
@@ -224,13 +241,19 @@ onUnmounted(() => {
             v-for="room in chatStore.filteredRooms" 
             :key="room._id" 
             class="room-item" 
-            :class="{ active: chatStore.activeRoomId === room._id }"
+            :class="{ active: chatStore.activeRoomId === room._id, 'is-unread': isRoomUnread(room) }"
             @click="selectRoom(room._id)"
           >
             <div class="avatar-circle">{{ getRoomName(room).charAt(0) }}</div>
             <div class="room-info">
-              <span class="room-name">{{ getRoomName(room) }}</span>
-              <span class="last-message">Click to view messages...</span>
+              <div class="name-time">
+                <span class="room-name">{{ getRoomName(room) }}</span>
+                <span class="room-time">{{ formatLastMessageTime(room.lastMessageAt) }}</span>
+              </div>
+              <div class="snippet-unread">
+                <span class="last-message">{{ room.lastMessageContent || 'No messages yet...' }}</span>
+                <div v-if="isRoomUnread(room)" class="unread-dot"></div>
+              </div>
             </div>
             
             <router-link :to="`/profile/${getOtherUserId(room)}`" class="profile-link-small" @click.stop>
@@ -468,11 +491,36 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  flex: 1;
+  overflow: hidden;
+}
+
+.name-time {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .room-name {
   font-weight: 700;
   font-size: 1.05rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.snippet-unread {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .last-message {
@@ -481,7 +529,25 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 170px; /* Reduced to make room for profile-link */
+  flex: 1;
+}
+
+.unread-dot {
+  width: 10px;
+  height: 10px;
+  background: var(--primary-color);
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px var(--primary-color);
+}
+
+.room-item.is-unread .room-name {
+  color: #fff;
+}
+
+.room-item.is-unread .last-message {
+  color: #fff;
+  font-weight: 600;
 }
 
 .profile-link-small {
