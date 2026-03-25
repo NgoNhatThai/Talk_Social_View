@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useAppStore } from '@/store/app';
+import { useAuthStore } from '@/store/auth';
 import { onMounted } from 'vue';
 
 const store = useAppStore();
+const authStore = useAuthStore();
 
 onMounted(() => {
   store.checkBackend();
@@ -15,6 +17,12 @@ onMounted(() => {
       <h1>Welcome to <span class="gradient-text">TALK SOCIAL</span></h1>
       <p>A high-performance codebase integrated with your local backend at port 3030.</p>
       
+      <div v-if="authStore.user" style="margin-top: 2rem;">
+        <router-link to="/chats" class="btn btn-primary" style="font-size: 1.1rem; padding: 0.75rem 2rem; border-radius: 99px;">
+          Go to Chats
+        </router-link>
+      </div>
+
       <div class="status-badge" :class="store.backendStatus">
         Backend Status: {{ store.backendStatus.toUpperCase() }}
       </div>

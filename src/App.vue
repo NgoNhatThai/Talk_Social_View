@@ -27,6 +27,7 @@ const handleLogout = () => {
         <router-link to="/about" class="nav-link">About</router-link>
         
         <template v-if="authStore.user">
+          <router-link to="/chats" class="nav-link">Chats</router-link>
           <div class="user-profile">
             <router-link to="/profile/me" class="username-link">
               <span class="avatar-sm">{{ authStore.user.username?.charAt(0) || 'U' }}</span>

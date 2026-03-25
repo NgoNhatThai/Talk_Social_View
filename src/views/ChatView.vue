@@ -11,7 +11,6 @@ import {
   Download as DownloadIcon,
   CornerUpLeft as ReplyIcon,
   MessageSquare as MessageSquareIcon,
-  Plus as PlusIcon,
   Search as SearchIcon,
   X as XIcon,
   File as FileIcon,
@@ -229,7 +228,9 @@ const formatLastMessageTime = (dateString?: string) => {
 };
 
 const pendingRequests = computed(() => 
-  chatStore.friendRequests.filter(r => r.status === 'pending')
+  chatStore.friendRequests.filter(r => 
+    r.status === 'pending' && String(r.toUserId) === String(authStore.user?._id)
+  )
 );
 
 const loadMoreObserver = ref<IntersectionObserver | null>(null);
@@ -315,7 +316,7 @@ onUnmounted(() => {
         <div v-else class="requests-list">
           <div v-for="req in pendingRequests" :key="req._id" class="request-item">
             <div class="req-info">
-              <span>Request from: {{ req.fromUser?.username?.substring(0, 8) }}...</span>
+              <span>From: {{ req.fromUser?.username?.substring(0, 20) }}...</span>
             </div>
             <div class="req-actions">
               <button class="btn btn-xs btn-primary" @click="handleAccept(req._id)">Accept</button>
